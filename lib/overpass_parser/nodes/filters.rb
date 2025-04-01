@@ -23,19 +23,19 @@ module OverpassParser
       const :area_id, T.nilable(String)
       const :around, T.nilable(FilterAround)
 
-      def bbox_clauses(sql_dialect)
+      def bbox_clauses(sql_dialect, db_srid = 4326) # SRID 4326 (osmosis, default) or 3857 (osm2pgsql)
         "#{sql_dialect.st_intersects_extent}(" \
-          "ST_Envelope('SRID=4326;LINESTRING(" \
+          "ST_Transform(ST_Envelope('SRID=4326;LINESTRING(" \
           "#{T.must(bbox)[1]} #{T.must(bbox)[0]}, " \
           "#{T.must(bbox)[3]} #{T.must(bbox)[2]}" \
-          ")'::geometry), geom)"
+          ")'::geometry), #{db_srid}), geom)"
       end
 
-      def poly_clauses(sql_dialect)
+      def poly_clauses(sql_dialect, db_srid = 4326)
         coords = T.must(poly).collect do |lat, lon|
           "#{lon} #{lat}"
         end.join(', ')
-        "#{sql_dialect.st_intersects}('SRID=4326;POLYGON(#{coords})'::geometry, geom)"
+        "#{sql_dialect.st_intersects}(ST_Transform('SRID=4326;POLYGON(#{coords})'::geometry, #{db_srid}), geom)"
       end
 
       sig do
@@ -43,10 +43,10 @@ module OverpassParser
           sql_dialect: SqlDialect::SqlDialect
         ).returns(T.nilable(String))
       end
-      def to_sql(sql_dialect)
+      def to_sql(sql_dialect, db_srid = 4326)
         clauses = []
-        clauses << bbox_clauses(sql_dialect) unless bbox.nil?
-        clauses << poly_clauses(sql_dialect) unless poly.nil?
+        clauses << bbox_clauses(sql_dialect, db_srid) unless bbox.nil?
+        clauses << poly_clauses(sql_dialect, db_srid) unless poly.nil?
         clauses << "id = ANY (ARRAY[#{ids&.collect(&:to_s)&.join(', ')}])" unless ids.nil?
         clauses << "ST_Intersects(geom, (SELECT #{sql_dialect.st_union}(geom) FROM _#{area_id}))" unless area_id.nil?
         unless around.nil?
