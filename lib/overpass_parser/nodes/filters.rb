@@ -23,19 +23,19 @@ module OverpassParser
       const :area_id, T.nilable(String)
       const :around, T.nilable(FilterAround)
 
-      def bbox_clauses(sql_dialect)
+      def bbox_clauses(sql_dialect) # SRID 4326 (osmosis, default) or 3857 (osm2pgsql)
         "#{sql_dialect.st_intersects_extent}(" \
-          "ST_Envelope('SRID=4326;LINESTRING(" \
+          "ST_Transform(ST_Envelope('SRID=4326;LINESTRING(" \
           "#{T.must(bbox)[1]} #{T.must(bbox)[0]}, " \
           "#{T.must(bbox)[3]} #{T.must(bbox)[2]}" \
-          ")'::geometry), geom)"
+          ")'::geometry), 3857), geom)"
       end
 
       def poly_clauses(sql_dialect)
         coords = T.must(poly).collect do |lat, lon|
           "#{lon} #{lat}"
         end.join(', ')
-        "#{sql_dialect.st_intersects}('SRID=4326;POLYGON(#{coords})'::geometry, geom)"
+        "#{sql_dialect.st_intersects}(ST_Transform('SRID=4326;POLYGON(#{coords})'::geometry, 3857), geom)"
       end
 
       sig do
